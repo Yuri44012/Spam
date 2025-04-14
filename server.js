@@ -61,7 +61,7 @@ app.post('/post', async (req, res) => {
       headless: true,  // Ensure headless mode
       args: ['--no-sandbox', '--disable-setuid-sandbox'],  // Disable sandboxing (needed for some environments like Render)
       defaultViewport: null,
-      timeout: 60000, // Increase the launch timeout
+      timeout: 60000,  // Increase the launch timeout
     });
 
     const page = await browser.newPage();
@@ -76,26 +76,31 @@ app.post('/post', async (req, res) => {
       secure: true,
     });
 
-    // Go to the group page and wait for the page to load
-    console.log('Navigating to the group page...');
-    await page.goto(`https://www.roblox.com/groups/${groupId}`, {
+    // Navigate to the group wall page
+    console.log('Navigating to the group wall...');
+    await page.goto(`https://www.roblox.com/groups/${groupId}/wall`, {
       waitUntil: 'domcontentloaded',
       timeout: 60000,  // Increased navigation timeout
     });
 
-    // Wait for the message input field to appear
-    console.log('Waiting for the message input field...');
-    await page.waitForSelector('textarea[name="message"]', { timeout: 10000 });
+    // Debugging: Check if we can find the group wall
+    const pageContent = await page.content();
+    console.log('Group Wall Loaded: Checking content...');
+    console.log(pageContent.substring(0, 1000));  // Print first 1000 chars of page content
+
+    // Wait for the message input field on the group wall
+    console.log('Waiting for message input field...');
+    await page.waitForSelector('textarea[name="message"]', { timeout: 30000 });
 
     // Type the message into the textarea
     await page.type('textarea[name="message"]', message);
 
-    // Wait for the submit button and click it
+    // Wait for submit button and click it
     console.log('Waiting for submit button...');
     await page.waitForSelector('button[type="submit"]', { timeout: 10000 });
     await page.click('button[type="submit"]');
 
-    // Wait for 3 seconds to ensure the post is completed
+    // Wait for 3 seconds to ensure post is completed
     await page.waitForTimeout(3000);
     await browser.close();
 
