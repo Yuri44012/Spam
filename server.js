@@ -18,21 +18,41 @@ const getUserCookie = req =>
   req.body.cookie ||
   null;
 
-// Direct‑API post helper
+// Direct‑API post helper with X-CSRF-Token retry
 async function postViaApi(cookie, groupId, message) {
-  return fetch(
-    `https://groups.roblox.com/v1/groups/${groupId}/wall/posts`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cookie': `.ROBLOSECURITY=${cookie}`,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-      },
-      body: JSON.stringify({ body: message }),
-      redirect: 'manual'
+  const url = `https://groups.roblox.com/v1/groups/${groupId}/wall/posts`;
+  const baseHeaders = {
+    'Content-Type': 'application/json',
+    'Cookie': `.ROBLOSECURITY=${cookie}`,
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+  };
+  const body = JSON.stringify({ body: message });
+
+  // 1) First attempt
+  let res = await fetch(url, {
+    method: 'POST',
+    headers: baseHeaders,
+    body,
+    redirect: 'manual'
+  });
+
+  // 2) If 403 + XSRF required, grab token and retry
+  if (res.status === 403) {
+    const token = res.headers.get('x-csrf-token');
+    if (token) {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          ...baseHeaders,
+          'X-CSRF-TOKEN': token
+        },
+        body,
+        redirect: 'manual'
+      });
     }
-  );
+  }
+
+  return res;
 }
 
 // CAPTCHA solver (unchanged)
@@ -117,26 +137,22 @@ app.post('/post', async (req, res) => {
     return res.status(400).json({ error: 'Missing .ROBLOSECURITY cookie' });
   }
 
-  // --- 1) Try direct API first ---
+  // 1) Try direct API first
   try {
-    const apiRes = await postViaApi(cookie, groupId, message);
+    const apiRes  = await postViaApi(cookie, groupId, message);
     const apiText = await apiRes.text();
     console.log('API response status:', apiRes.status);
     console.log('API response body:', apiText);
 
     if (apiRes.ok) {
       return res.json({ success: true, via: 'api' });
-    } else {
-      // Surface API error to client
-      console.warn('API post failed:', apiRes.status, apiText);
-      // fall through to Puppeteer fallback
     }
+    console.warn('API post failed, falling back to Puppeteer');
   } catch (e) {
     console.error('API post error:', e);
-    // fall through to Puppeteer fallback
   }
 
-  // --- 2) Puppeteer fallback ---
+  // 2) Puppeteer fallback
   try {
     const browser = await puppeteer.launch({
       headless: true,
@@ -144,11 +160,9 @@ app.post('/post', async (req, res) => {
     });
     const page = await browser.newPage();
 
-    // a) Disable all timeouts
     page.setDefaultNavigationTimeout(0);
     page.setDefaultTimeout(0);
 
-    // b) Block images/styles/fonts to speed up load
     await page.setRequestInterception(true);
     page.on('request', req => {
       const t = req.resourceType();
@@ -156,7 +170,6 @@ app.post('/post', async (req, res) => {
       else req.continue();
     });
 
-    // c) Authenticate via cookie
     await page.setCookie({
       name: '.ROBLOSECURITY',
       value: cookie,
@@ -166,7 +179,6 @@ app.post('/post', async (req, res) => {
       path: '/'
     });
 
-    // d) Go to the wall page, wait only for DOMContentLoaded
     await page.goto(`https://www.roblox.com/groups/${groupId}/wall`, {
       waitUntil: 'domcontentloaded'
     });
@@ -175,9 +187,8 @@ app.post('/post', async (req, res) => {
     await page.waitForSelector('textarea[name="message"]', { timeout: 30000 });
     await page.type('textarea[name="message"]', message);
 
-    // e) Solve CAPTCHA if present
+    console.log('Puppeteer: checking for CAPTCHA');
     try {
-      console.log('Puppeteer: checking for CAPTCHA');
       await solveCaptcha(page);
       console.log('Puppeteer: CAPTCHA solved');
     } catch (captchaErr) {
