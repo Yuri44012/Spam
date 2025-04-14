@@ -46,6 +46,57 @@ async function postViaApi(cookie, groupId, message) {
   return res;
 }
 
+async function solveCaptcha(page) {
+  const apiKey = '097c8a4c30aa77f731649614c55cdbb5';  // Your API key
+  try {
+    await page.waitForSelector('iframe[src*="recaptcha"]', { timeout: 30000 });
+    const iframeHandle = await page.$('iframe[src*="recaptcha"]');
+    const iframe = await iframeHandle.contentFrame();
+    const sitekey = await iframe.$eval('.g-recaptcha', el => el.getAttribute('data-sitekey'));
+
+    const pageurl = page.url();
+
+    // Send the captcha to freecaptchabypass
+    const inRes = await axios.post('https://freecaptchabypass.com/api/recaptcha', {
+      key: apiKey,
+      method: 'userrecaptcha',
+      googlekey: sitekey,
+      pageurl: pageurl
+    });
+
+    if (inRes.data.status !== 'success') throw new Error('Captcha submit failed: ' + inRes.data.message);
+
+    const requestId = inRes.data.request_id;
+
+    let solution;
+    while (true) {
+      const outRes = await axios.get('https://freecaptchabypass.com/api/recaptcha/result', {
+        params: { key: apiKey, id: requestId }
+      });
+
+      if (outRes.data.status === 'pending') {
+        await new Promise(r => setTimeout(r, 5000));
+      } else if (outRes.data.status === 'success') {
+        solution = outRes.data.token;
+        break;
+      } else {
+        throw new Error('Captcha solving failed: ' + outRes.data.message);
+      }
+    }
+
+    // Inject captcha response
+    await page.evaluate(token => {
+      document.getElementById('g-recaptcha-response').innerHTML = token;
+    }, solution);
+
+    await page.click('button[type="submit"]');
+
+  } catch (err) {
+    console.error('Captcha solve error:', err.message);
+    throw err;
+  }
+}
+
 app.get('/user', async (req, res) => {
   const cookie = getUserCookie(req);
   if (!cookie) return res.status(400).json({ error: 'Missing .ROBLOSECURITY cookie' });
