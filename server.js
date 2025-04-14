@@ -2,7 +2,7 @@ const express = require('express');
 const fetch = require('node-fetch');
 const cors = require('cors');
 const path = require('path');
-const puppeteer = require('puppeteer'); // Import Puppeteer
+const puppeteer = require('puppeteer-core');
 
 const app = express();
 app.use(cors());
