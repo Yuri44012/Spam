@@ -25,17 +25,18 @@ app.post('/post', async (req, res) => {
   try {
     const browser = await puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox','--disable-setuid-sandbox']
+      executablePath: '/usr/bin/chromium-browser', // Required for Render
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
-    const page = await browser.newPage();
 
+    const page = await browser.newPage();
     page.setDefaultNavigationTimeout(0);
     page.setDefaultTimeout(0);
 
     await page.setRequestInterception(true);
     page.on('request', req => {
       const t = req.resourceType();
-      if (['image','stylesheet','font','media'].includes(t)) req.abort();
+      if (['image', 'stylesheet', 'font', 'media'].includes(t)) req.abort();
       else req.continue();
     });
 
@@ -72,8 +73,7 @@ app.post('/post', async (req, res) => {
       console.warn('Puppeteer: no CAPTCHA or solve failed:', captchaErr.message);
     }
 
-    // Optional: click post button inside iframe, adjust selector if needed
-    const [postBtn] = await frame.$x("//button[contains(text(), 'Post')]");
+    const [postBtn] = await frame.$x("//button[contains(normalize-space(.), 'Post')]");
     if (postBtn) {
       await postBtn.click();
     } else {
@@ -85,6 +85,7 @@ app.post('/post', async (req, res) => {
 
     console.log('Puppeteer: post complete');
     return res.json({ success: true, via: 'puppeteer' });
+
   } catch (err) {
     console.error('Puppeteer post error:', err);
     return res.status(500).json({ error: err.message });
