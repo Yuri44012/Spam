@@ -108,22 +108,33 @@ app.get('/groups/:userId', async (req, res) => {
 
 // Post to group wall
 app.post('/post', async (req, res) => {
+  console.log('POST /post called with:', req.body);
+
   const cookie  = getUserCookie(req);
   const { groupId, message } = req.body;
-  if (!cookie) return res.status(400).json({ error: 'Missing .ROBLOSECURITY cookie' });
+  if (!cookie) {
+    console.warn('Missing cookie in request');
+    return res.status(400).json({ error: 'Missing .ROBLOSECURITY cookie' });
+  }
 
   // --- 1) Try direct API first ---
-  /*
   try {
     const apiRes = await postViaApi(cookie, groupId, message);
+    const apiText = await apiRes.text();
+    console.log('API response status:', apiRes.status);
+    console.log('API response body:', apiText);
+
     if (apiRes.ok) {
       return res.json({ success: true, via: 'api' });
+    } else {
+      // Surface API error to client
+      console.warn('API post failed:', apiRes.status, apiText);
+      // fall through to Puppeteer fallback
     }
-    console.log('API post failed, status:', apiRes.status);
   } catch (e) {
-    console.log('API post error, falling back to Puppeteer:', e.message);
+    console.error('API post error:', e);
+    // fall through to Puppeteer fallback
   }
-  */
 
   // --- 2) Puppeteer fallback ---
   try {
@@ -160,19 +171,27 @@ app.post('/post', async (req, res) => {
       waitUntil: 'domcontentloaded'
     });
 
+    console.log('Puppeteer: page loaded, typing message');
     await page.waitForSelector('textarea[name="message"]', { timeout: 30000 });
     await page.type('textarea[name="message"]', message);
 
     // e) Solve CAPTCHA if present
-    try { await solveCaptcha(page); } catch {}
+    try {
+      console.log('Puppeteer: checking for CAPTCHA');
+      await solveCaptcha(page);
+      console.log('Puppeteer: CAPTCHA solved');
+    } catch (captchaErr) {
+      console.warn('Puppeteer: no CAPTCHA or solve failed:', captchaErr.message);
+    }
 
     await page.click('button[type="submit"]');
     await page.waitForTimeout(3000);
     await browser.close();
 
+    console.log('Puppeteer: post complete');
     return res.json({ success: true, via: 'puppeteer' });
   } catch (err) {
-    console.error('Post error:', err);
+    console.error('Puppeteer post error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
