@@ -60,10 +60,13 @@ app.post('/post', async (req, res) => {
     const browser = await puppeteer.launch({
       headless: true,  // Ensure headless mode
       args: ['--no-sandbox', '--disable-setuid-sandbox'],  // Disable sandboxing (needed for some environments like Render)
+      defaultViewport: null,
+      timeout: 60000, // Increase the launch timeout
     });
 
     const page = await browser.newPage();
 
+    // Set the cookie for authentication
     await page.setCookie({
       name: '.ROBLOSECURITY',
       value: cookie,
@@ -73,14 +76,26 @@ app.post('/post', async (req, res) => {
       secure: true,
     });
 
-    await page.goto(`https://www.roblox.com/groups/${groupId}`, { waitUntil: 'domcontentloaded' });
+    // Go to the group page and wait for the page to load
+    console.log('Navigating to the group page...');
+    await page.goto(`https://www.roblox.com/groups/${groupId}`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 60000,  // Increased navigation timeout
+    });
 
+    // Wait for the message input field to appear
+    console.log('Waiting for the message input field...');
     await page.waitForSelector('textarea[name="message"]', { timeout: 10000 });
+
+    // Type the message into the textarea
     await page.type('textarea[name="message"]', message);
 
+    // Wait for the submit button and click it
+    console.log('Waiting for submit button...');
     await page.waitForSelector('button[type="submit"]', { timeout: 10000 });
     await page.click('button[type="submit"]');
 
+    // Wait for 3 seconds to ensure the post is completed
     await page.waitForTimeout(3000);
     await browser.close();
 
