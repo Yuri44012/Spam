@@ -2,6 +2,7 @@ const express = require('express');
 const fetch = require('node-fetch');
 const cors = require('cors');
 const path = require('path');
+const puppeteer = require('puppeteer');  // Import Puppeteer
 
 const app = express();
 app.use(cors());
@@ -48,43 +49,53 @@ app.get('/groups/:userId', async (req, res) => {
   }
 });
 
-// Post message to group wall (with CSRF token)
+// Post message to group wall using Puppeteer to bypass CAPTCHA
 app.post('/post', async (req, res) => {
   const COOKIE = req.headers.authorization;
   const { groupId, message } = req.body;
   if (!COOKIE) return res.status(400).json({ error: 'Missing cookie' });
 
   try {
-    // Get CSRF token
-    const tokenRes = await fetch('https://auth.roblox.com/v2/logout', {
-      method: 'POST',
-      headers: {
-        Cookie: `.ROBLOSECURITY=${COOKIE}`
-      }
+    // Launch Puppeteer
+    const browser = await puppeteer.launch({ headless: false });  // Set to false to interact with the browser
+    const page = await browser.newPage();
+
+    // Set the cookie for the current session
+    await page.setCookie({
+      name: '.ROBLOSECURITY',
+      value: COOKIE,
+      domain: '.roblox.com',
     });
 
-    const csrfToken = tokenRes.headers.get('x-csrf-token');
-    if (!csrfToken) throw new Error('Failed to get X-CSRF-TOKEN');
+    // Navigate to Roblox Group Wall
+    await page.goto(`https://www.roblox.com/groups/${groupId}`);
 
-    // Send wall post
-    const postRes = await fetch(`https://groups.roblox.com/v1/groups/${groupId}/wall/posts`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': csrfToken,
-        Cookie: `.ROBLOSECURITY=${COOKIE}`
-      },
-      body: JSON.stringify({ body: message })
-    });
+    // Wait for the page to load and the post form to be available
+    await page.waitForSelector('textarea[name="message"]'); // Adjust selector as per your page structure
 
-    if (!postRes.ok) {
-      const errorText = await postRes.text();
-      console.error("Post failed:", errorText);
-      throw new Error('Failed to post');
-    }
+    // Type the message
+    await page.type('textarea[name="message"]', message);
+
+    // Solve CAPTCHA manually (first time)
+    console.log('Please solve the CAPTCHA manually in the browser window.');
+
+    // Wait for the form to be able to submit (after CAPTCHA)
+    await page.waitForSelector('button[type="submit"]'); // Adjust selector
+
+    // Submit the form
+    await page.click('button[type="submit"]');
+
+    // Wait for the confirmation that the message was posted
+    await page.waitForSelector('.success-message'); // Adjust this selector based on the page structure
+
+    console.log('Post successful!');
+
+    // Close the browser after success
+    await browser.close();
 
     res.json({ success: true });
   } catch (err) {
+    console.error('Error during post:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
