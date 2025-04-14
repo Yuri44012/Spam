@@ -17,7 +17,7 @@ const COOKIE = process.env.ROBLOSECURITY;
 // Check for missing .ROBLOSECURITY cookie
 if (!COOKIE) {
   console.error("Missing .ROBLOSECURITY in .env");
-  process.exit(1);  // Exit if the cookie is not set
+  process.exit(1);
 }
 
 // Route to get authenticated user info
@@ -63,29 +63,32 @@ app.post('/post', async (req, res) => {
 
   try {
     const browser = await puppeteer.launch({
-      executablePath: await chromium.executablePath || '/usr/bin/chromium-browser',
+      executablePath: await chromium.executablePath, // Correct path from chrome-aws-lambda
       args: chromium.args,
       headless: chromium.headless,
+      defaultViewport: chromium.defaultViewport,
     });
 
     const page = await browser.newPage();
+
     await page.setCookie({
       name: '.ROBLOSECURITY',
       value: userCookie,
       domain: '.roblox.com',
+      path: '/',
+      httpOnly: true,
+      secure: true,
     });
 
     await page.goto(`https://www.roblox.com/groups/${groupId}`, { waitUntil: 'domcontentloaded' });
 
-    // Wait for the message input field and type the message
-    await page.waitForSelector('textarea[name="message"]');
+    await page.waitForSelector('textarea[name="message"]', { timeout: 10000 });
     await page.type('textarea[name="message"]', message);
 
-    // Wait for and click the submit button
-    await page.waitForSelector('button[type="submit"]');
+    await page.waitForSelector('button[type="submit"]', { timeout: 10000 });
     await page.click('button[type="submit"]');
 
-    await page.waitForTimeout(3000);  // Wait for 3 seconds to ensure post completes
+    await page.waitForTimeout(3000);
     await browser.close();
 
     res.json({ success: true });
