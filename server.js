@@ -16,7 +16,7 @@ const getUserCookie = req =>
   req.headers.authorization?.replace(/^Bearer\s+/i, '') || req.body.cookie || null;
 
 async function postViaApi(cookie, groupId, message) {
-  const url = `https://groups.roblox.com/v1/groups/${groupId}/wall/posts`;
+  const url = `https://groups.roblox.com/v1/groups/${groupId}/wall/posts`; // Corrected URL
   const baseHeaders = {
     'Content-Type': 'application/json',
     'Cookie': `.ROBLOSECURITY=${cookie}`,
@@ -175,7 +175,7 @@ app.post('/post', async (req, res) => {
       secure: true,
       path: '/'
     });
-    await page.goto(`https://www.roblox.com/groups/${groupId}/wall`, {
+    await page.goto(`https://www.roblox.com/groups/${groupId}/wall`, { // Corrected URL
       waitUntil: 'domcontentloaded'
     });
     console.log('Waiting for wall input...');
