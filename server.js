@@ -46,51 +46,6 @@ async function postViaApi(cookie, groupId, message) {
   return res;
 }
 
-async function solveCaptcha(page) {
-  const apiKey = 'a510508163576728d096497dd065e4e5';
-  try {
-    await page.waitForSelector('iframe[src*="recaptcha"]', { timeout: 30000 });
-    const iframeHandle = await page.$('iframe[src*="recaptcha"]');
-    const iframe = await iframeHandle.contentFrame();
-    const sitekey = await iframe.$eval('.g-recaptcha', el => el.getAttribute('data-sitekey'));
-
-    const inRes = await axios.post('http://2captcha.com/in.php', null, {
-      params: {
-        key: apiKey,
-        method: 'userrecaptcha',
-        googlekey: sitekey,
-        pageurl: page.url()
-      }
-    });
-
-    const requestId = inRes.data.request;
-
-    let solution;
-    while (true) {
-      const outRes = await axios.get('http://2captcha.com/res.php', {
-        params: { key: apiKey, action: 'get', id: requestId }
-      });
-
-      if (outRes.data === 'CAPCHA_NOT_READY') {
-        await new Promise(r => setTimeout(r, 5000));
-      } else {
-        solution = outRes.data.split('|')[1];
-        break;
-      }
-    }
-
-    await iframe.evaluate(token => {
-      document.getElementById('g-recaptcha-response').innerHTML = token;
-    }, solution);
-
-    await page.click('button[type="submit"]');
-
-  } catch (err) {
-    console.error('Captcha solve error:', err);
-    throw err;
-  }
-}
-
 app.get('/user', async (req, res) => {
   const cookie = getUserCookie(req);
   if (!cookie) return res.status(400).json({ error: 'Missing .ROBLOSECURITY cookie' });
@@ -128,7 +83,6 @@ app.post('/post', async (req, res) => {
   const { groupId, message } = req.body;
 
   if (!cookie) {
-    console.warn('Missing cookie in request');
     return res.status(400).json({ error: 'Missing .ROBLOSECURITY cookie' });
   }
 
@@ -141,7 +95,7 @@ app.post('/post', async (req, res) => {
     if (apiRes.ok) {
       return res.json({ success: true, via: 'api' });
     }
-    console.warn('API post failed, falling back to Puppeteer');
+    console.warn('API failed, falling back to Puppeteer');
   } catch (e) {
     console.error('API post error:', e);
   }
@@ -156,13 +110,6 @@ app.post('/post', async (req, res) => {
     page.setDefaultNavigationTimeout(0);
     page.setDefaultTimeout(0);
 
-    await page.setRequestInterception(true);
-    page.on('request', req => {
-      const t = req.resourceType();
-      if (['image', 'stylesheet', 'font', 'media'].includes(t)) req.abort();
-      else req.continue();
-    });
-
     await page.setCookie({
       name: '.ROBLOSECURITY',
       value: cookie,
@@ -176,34 +123,20 @@ app.post('/post', async (req, res) => {
       waitUntil: 'domcontentloaded'
     });
 
-    console.log('Puppeteer: waiting for iframe');
-    await page.waitForSelector('#group-wall-iframe', { timeout: 30000 });
+    console.log('Waiting for wall input...');
+    await page.waitForSelector('div[contenteditable="true"]', { timeout: 30000 });
+    await page.click('div[contenteditable="true"]');
+    await page.keyboard.type(message);
 
-    const iframeHandle = await page.$('#group-wall-iframe');
-    const frame = await iframeHandle.contentFrame();
-
-    console.log('Puppeteer: waiting for wall input in iframe');
-    await frame.waitForSelector('#wall-message-input', { timeout: 30000 });
-
-    await frame.focus('#wall-message-input');
-    await frame.type('#wall-message-input', message);
-
-    console.log('Puppeteer: checking for CAPTCHA');
-    try {
-      await solveCaptcha(page);
-      console.log('Puppeteer: CAPTCHA solved');
-    } catch (captchaErr) {
-      console.warn('Puppeteer: no CAPTCHA or solve failed:', captchaErr.message);
-    }
-
-    const [postBtn] = await frame.$x("//button[contains(normalize-space(.), 'Post')]");
+    console.log('Checking for Post button...');
+    const [postBtn] = await page.$x("//button[contains(normalize-space(.), 'Post')]");
     if (!postBtn) throw new Error('Post button not found');
     await postBtn.click();
 
     await page.waitForTimeout(3000);
     await browser.close();
 
-    console.log('Puppeteer: post complete');
+    console.log('Post submitted via Puppeteer');
     return res.json({ success: true, via: 'puppeteer' });
 
   } catch (err) {
