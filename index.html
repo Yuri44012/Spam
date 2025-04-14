@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Roblox Group Wall Poster</title>
+  <style>
+    body { font-family: sans-serif; padding: 30px; background: #f9f9f9; }
+    .container { max-width: 400px; margin: auto; padding: 20px; background: white; border-radius: 10px; }
+    textarea, select, button { width: 100%; margin-top: 10px; padding: 10px; }
+    button { background: #007bff; color: white; border: none; cursor: pointer; }
+    button:hover { background: #0056b3; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Post to Group Wall</h2>
+    <div id="login">
+      <button onclick="checkLogin()">Check Login</button>
+    </div>
+    <div id="form" style="display:none;">
+      <p>Logged in as: <span id="username"></span></p>
+      <select id="groupList"></select>
+      <textarea id="message" placeholder="Type your message"></textarea>
+      <button onclick="postMessage()">Post</button>
+      <p id="status"></p>
+    </div>
+  </div>
+
+  <script>
+    let userId = null;
+
+    async function checkLogin() {
+      const res = await fetch('/user');
+      const data = await res.json();
+
+      if (data.error) return alert("Login failed");
+      userId = data.id;
+      document.getElementById("username").innerText = data.name;
+      document.getElementById("login").style.display = "none";
+      document.getElementById("form").style.display = "block";
+
+      const groupRes = await fetch(`/groups/${userId}`);
+      const groups = await groupRes.json();
+      const groupSelect = document.getElementById("groupList");
+
+      groups.data.forEach(g => {
+        const opt = document.createElement("option");
+        opt.value = g.group.id;
+        opt.text = g.group.name;
+        groupSelect.appendChild(opt);
+      });
+    }
+
+    async function postMessage() {
+      const groupId = document.getElementById("groupList").value;
+      const message = document.getElementById("message").value;
+      const res = await fetch('/post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId, message })
+      });
+      const data = await res.json();
+      document.getElementById("status").innerText = data.success ? "Posted!" : "Error: " + data.error;
+    }
+  </script>
+</body>
+</html>
