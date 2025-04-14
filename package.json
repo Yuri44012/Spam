@@ -12,5 +12,6 @@
     "puppeteer-core": "10.1.0",
     "puppeteer": "^10.1.0",
     "chrome-aws-lambda": "10.1.0"
+    "axios": "^1.6.7"
   }
 }
