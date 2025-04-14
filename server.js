@@ -18,9 +18,9 @@ const getUserCookie = req =>
   req.body.cookie ||
   null;
 
-// (Optional) direct‐API post instead of Puppeteer
+// Direct‑API post helper
 async function postViaApi(cookie, groupId, message) {
-  const res = await fetch(
+  return fetch(
     `https://groups.roblox.com/v1/groups/${groupId}/wall/posts`,
     {
       method: 'POST',
@@ -33,10 +33,9 @@ async function postViaApi(cookie, groupId, message) {
       redirect: 'manual'
     }
   );
-  return res;
 }
 
-// CAPTCHA solver unchanged
+// CAPTCHA solver (unchanged)
 async function solveCaptcha(page) {
   const apiKey = 'a510508163576728d096497dd065e4e5';
   try {
@@ -107,24 +106,26 @@ app.get('/groups/:userId', async (req, res) => {
   }
 });
 
-// Post to group wall (Puppeteer fallback)
+// Post to group wall
 app.post('/post', async (req, res) => {
   const cookie  = getUserCookie(req);
   const { groupId, message } = req.body;
   if (!cookie) return res.status(400).json({ error: 'Missing .ROBLOSECURITY cookie' });
 
-  // Try direct API first:
+  // --- 1) Try direct API first ---
   /*
   try {
     const apiRes = await postViaApi(cookie, groupId, message);
-    if (apiRes.ok) return res.json({ success: true });
+    if (apiRes.ok) {
+      return res.json({ success: true, via: 'api' });
+    }
     console.log('API post failed, status:', apiRes.status);
   } catch (e) {
     console.log('API post error, falling back to Puppeteer:', e.message);
   }
   */
 
-  // Puppeteer fallback:
+  // --- 2) Puppeteer fallback ---
   try {
     const browser = await puppeteer.launch({
       headless: true,
@@ -132,7 +133,19 @@ app.post('/post', async (req, res) => {
     });
     const page = await browser.newPage();
 
-    // authenticate
+    // a) Disable all timeouts
+    page.setDefaultNavigationTimeout(0);
+    page.setDefaultTimeout(0);
+
+    // b) Block images/styles/fonts to speed up load
+    await page.setRequestInterception(true);
+    page.on('request', req => {
+      const t = req.resourceType();
+      if (['image','stylesheet','font','media'].includes(t)) req.abort();
+      else req.continue();
+    });
+
+    // c) Authenticate via cookie
     await page.setCookie({
       name: '.ROBLOSECURITY',
       value: cookie,
@@ -142,30 +155,29 @@ app.post('/post', async (req, res) => {
       path: '/'
     });
 
-    // go to the real wall UI
+    // d) Go to the wall page, wait only for DOMContentLoaded
     await page.goto(`https://www.roblox.com/groups/${groupId}/wall`, {
-      waitUntil: 'networkidle2',
-      timeout: 60000
+      waitUntil: 'domcontentloaded'
     });
 
     await page.waitForSelector('textarea[name="message"]', { timeout: 30000 });
     await page.type('textarea[name="message"]', message);
 
-    // handle CAPTCHA if it appears
+    // e) Solve CAPTCHA if present
     try { await solveCaptcha(page); } catch {}
 
     await page.click('button[type="submit"]');
     await page.waitForTimeout(3000);
     await browser.close();
 
-    res.json({ success: true });
+    return res.json({ success: true, via: 'puppeteer' });
   } catch (err) {
     console.error('Post error:', err);
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 });
 
-// serve React/Vue/whatever SPA
+// Serve your frontend SPA
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
