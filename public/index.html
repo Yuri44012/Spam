@@ -5,7 +5,7 @@
   <style>
     body { font-family: sans-serif; padding: 30px; background: #f9f9f9; }
     .container { max-width: 400px; margin: auto; padding: 20px; background: white; border-radius: 10px; }
-    textarea, select, input, button { width: 100%; margin-top: 10px; padding: 10px; }
+    textarea, input, button { width: 100%; margin-top: 10px; padding: 10px; }
     button { background: #007bff; color: white; border: none; cursor: pointer; }
     button:hover { background: #0056b3; }
   </style>
@@ -22,7 +22,9 @@
 
     <div id="form" style="display:none;">
       <p>Logged in as: <span id="username"></span></p>
-      <select id="groupList"></select>
+      
+      <input id="groupUrl" placeholder="Enter Roblox group URL (e.g., https://www.roblox.com/groups/123456789/Group-Name)" />
+      
       <textarea id="message" placeholder="Type your message"></textarea>
       <button onclick="postMessage()">Post</button>
       <p id="status"></p>
@@ -48,25 +50,16 @@
       document.getElementById("username").innerText = data.name;
       document.getElementById("login").style.display = "none";
       document.getElementById("form").style.display = "block";
-
-      const groupRes = await fetch(`/groups/${userId}`, {
-        headers: { Authorization: cookie }
-      });
-
-      const groups = await groupRes.json();
-      const groupSelect = document.getElementById("groupList");
-
-      groups.data.forEach(g => {
-        const opt = document.createElement("option");
-        opt.value = g.group.id;
-        opt.text = g.group.name;
-        groupSelect.appendChild(opt);
-      });
     }
 
     async function postMessage() {
-      const groupId = document.getElementById("groupList").value;
+      const groupUrl = document.getElementById("groupUrl").value.trim();
       const message = document.getElementById("message").value;
+
+      if (!groupUrl || !message) return alert("Please enter a group URL and message.");
+
+      // Extract group ID from the URL
+      const groupId = groupUrl.split('/')[4]; // Extract group ID from URL (e.g., https://www.roblox.com/groups/123456789/Group-Name)
 
       const res = await fetch('/post', {
         method: 'POST',
