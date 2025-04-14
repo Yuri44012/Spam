@@ -136,7 +136,7 @@ app.post('/post', async (req, res) => {
     });
 
     console.log('Navigating to the group wall...');
-    await page.goto(`https://www.roblox.com/groups/${groupId}/wall`, {
+    await page.goto(`https://api.roblox.com/v1/groups/{groupId}/wall/posts`, {
       waitUntil: 'domcontentloaded',
       timeout: 60000,
     });
