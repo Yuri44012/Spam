@@ -49,54 +49,43 @@ app.get('/groups/:userId', async (req, res) => {
   }
 });
 
-// Post message to group wall using Puppeteer to bypass CAPTCHA
+// Post message to group wall using Puppeteer-core
 app.post('/post', async (req, res) => {
   const COOKIE = req.headers.authorization;
   const { groupId, message } = req.body;
   if (!COOKIE) return res.status(400).json({ error: 'Missing cookie' });
 
   try {
-    // Launch Puppeteer
     const browser = await puppeteer.launch({
-      headless: true, // Change to false if you need to see the browser interaction
-      args: ['--no-sandbox', '--disable-setuid-sandbox'], // Necessary for some environments like Heroku or Render
+      executablePath: '/usr/bin/chromium-browser', // adjust path for your host
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
 
     const page = await browser.newPage();
 
-    // Set the cookie for the current session
     await page.setCookie({
       name: '.ROBLOSECURITY',
       value: COOKIE,
       domain: '.roblox.com',
     });
 
-    // Navigate to Roblox Group Wall
-    await page.goto(`https://www.roblox.com/groups/${groupId}`);
+    await page.goto(`https://www.roblox.com/groups/${groupId}`, {
+      waitUntil: 'domcontentloaded',
+    });
 
-    // Wait for the page to load and the post form to be available
-    await page.waitForSelector('textarea[name="message"]'); // Adjust this selector as needed
-
-    // Type the message into the textarea
+    await page.waitForSelector('textarea[name="message"]');
     await page.type('textarea[name="message"]', message);
 
-    // Solve CAPTCHA manually (you'll need to solve the CAPTCHA on the browser instance)
-    console.log('Please solve the CAPTCHA manually in the browser window.');
+    console.log('If CAPTCHA appears, solve it manually in the headful browser.');
 
-    // Wait for the submit button to be available after CAPTCHA resolution
-    await page.waitForSelector('button[type="submit"]'); // Adjust this selector as needed
-
-    // Submit the form
+    await page.waitForSelector('button[type="submit"]');
     await page.click('button[type="submit"]');
 
-    // Wait for the confirmation that the message was posted (you may need to adjust this selector)
-    await page.waitForSelector('.success-message');
+    // Optional: wait for some success confirmation element
+    await page.waitForTimeout(3000); // adjust if needed
 
-    console.log('Post successful!');
-
-    // Close the browser after the post is completed
     await browser.close();
-
     res.json({ success: true });
   } catch (err) {
     console.error('Error during post:', err.message);
@@ -104,7 +93,7 @@ app.post('/post', async (req, res) => {
   }
 });
 
-// Serve frontend (your public directory should contain index.html)
+// Serve frontend
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
