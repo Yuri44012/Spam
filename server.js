@@ -4,30 +4,26 @@ const cors = require('cors');
 const path = require('path');
 const puppeteer = require('puppeteer-core');
 const chromium = require('chrome-aws-lambda');
-require('dotenv').config();
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-const PORT = process.env.PORT || 3000;
-const COOKIE = process.env.ROBLOSECURITY;
+// Helper to get cookie from header or body
+const getUserCookie = (req) =>
+  req.headers.authorization || req.body.cookie || null;
 
-// Check for missing .ROBLOSECURITY cookie
-if (!COOKIE) {
-  console.error("Missing .ROBLOSECURITY in .env");
-  process.exit(1);
-}
-
-// Route to get authenticated user info
+// Get authenticated user info
 app.get('/user', async (req, res) => {
-  const userCookie = req.headers.authorization || COOKIE;
-  if (!userCookie) return res.status(400).json({ error: 'Missing cookie' });
+  const cookie = getUserCookie(req);
+  if (!cookie) return res.status(400).json({ error: 'Missing .ROBLOSECURITY cookie' });
 
   try {
     const response = await fetch('https://users.roblox.com/v1/users/authenticated', {
-      headers: { Cookie: `.ROBLOSECURITY=${userCookie}` },
+      headers: { Cookie: `.ROBLOSECURITY=${cookie}` },
     });
 
     if (!response.ok) throw new Error('Invalid cookie');
@@ -38,14 +34,14 @@ app.get('/user', async (req, res) => {
   }
 });
 
-// Route to get user's group roles
+// Get user's group roles
 app.get('/groups/:userId', async (req, res) => {
-  const userCookie = req.headers.authorization || COOKIE;
-  if (!userCookie) return res.status(400).json({ error: 'Missing cookie' });
+  const cookie = getUserCookie(req);
+  if (!cookie) return res.status(400).json({ error: 'Missing .ROBLOSECURITY cookie' });
 
   try {
     const response = await fetch(`https://groups.roblox.com/v2/users/${req.params.userId}/groups/roles`, {
-      headers: { Cookie: `.ROBLOSECURITY=${userCookie}` },
+      headers: { Cookie: `.ROBLOSECURITY=${cookie}` },
     });
 
     const data = await response.json();
@@ -55,15 +51,15 @@ app.get('/groups/:userId', async (req, res) => {
   }
 });
 
-// Route to post a message to a group wall using Puppeteer
+// Post message using Puppeteer
 app.post('/post', async (req, res) => {
-  const userCookie = req.headers.authorization || COOKIE;
+  const cookie = getUserCookie(req);
   const { groupId, message } = req.body;
-  if (!userCookie) return res.status(400).json({ error: 'Missing cookie' });
+  if (!cookie) return res.status(400).json({ error: 'Missing .ROBLOSECURITY cookie' });
 
   try {
     const browser = await puppeteer.launch({
-      executablePath: await chromium.executablePath, // Correct path from chrome-aws-lambda
+      executablePath: await chromium.executablePath || '/usr/bin/chromium-browser',
       args: chromium.args,
       headless: chromium.headless,
       defaultViewport: chromium.defaultViewport,
@@ -73,7 +69,7 @@ app.post('/post', async (req, res) => {
 
     await page.setCookie({
       name: '.ROBLOSECURITY',
-      value: userCookie,
+      value: cookie,
       domain: '.roblox.com',
       path: '/',
       httpOnly: true,
@@ -98,12 +94,11 @@ app.post('/post', async (req, res) => {
   }
 });
 
-// Serve the frontend
+// Serve frontend
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Start the server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
