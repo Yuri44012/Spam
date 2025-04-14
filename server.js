@@ -3,6 +3,7 @@ const fetch = require('node-fetch');
 const cors = require('cors');
 const path = require('path');
 const puppeteer = require('puppeteer');
+const axios = require('axios');  // To communicate with 2Captcha API
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,6 +15,52 @@ app.use(express.static('public'));
 // Helper to get cookie from header or body
 const getUserCookie = (req) =>
   req.headers.authorization || req.body.cookie || null;
+
+// Function to solve CAPTCHA using 2Captcha
+async function solveCaptcha(page) {
+  const apiKey = 'a510508163576728d096497dd065e4e5';
+
+  await page.waitForSelector('iframe[src*="recaptcha"]', { timeout: 30000 });
+  const iframeHandle = await page.$('iframe[src*="recaptcha"]');
+  const iframe = await iframeHandle.contentFrame();
+
+  const sitekey = await iframe.$eval('.g-recaptcha', el => el.getAttribute('data-sitekey'));
+
+  const response = await axios.post('http://2captcha.com/in.php', null, {
+    params: {
+      key: apiKey,
+      method: 'userrecaptcha',
+      googlekey: sitekey,
+      pageurl: page.url(),
+    }
+  });
+
+  const requestId = response.data.request;
+  let solution;
+  while (true) {
+    const result = await axios.get('http://2captcha.com/res.php', {
+      params: {
+        key: apiKey,
+        action: 'get',
+        id: requestId,
+      }
+    });
+
+    if (result.data === 'CAPCHA_NOT_READY') {
+      console.log('CAPTCHA is not ready, retrying...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    } else {
+      solution = result.data.split('|')[1];
+      break;
+    }
+  }
+
+  await iframe.evaluate((token) => {
+    document.getElementById('g-recaptcha-response').innerHTML = token;
+  }, solution);
+
+  await page.click('button[type="submit"]');
+}
 
 // Get authenticated user info
 app.get('/user', async (req, res) => {
@@ -58,15 +105,14 @@ app.post('/post', async (req, res) => {
 
   try {
     const browser = await puppeteer.launch({
-      headless: true,  // Ensure headless mode
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],  // Disable sandboxing (needed for some environments like Render)
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
       defaultViewport: null,
-      timeout: 60000,  // Increase the launch timeout
+      timeout: 60000,
     });
 
     const page = await browser.newPage();
 
-    // Set the cookie for authentication
     await page.setCookie({
       name: '.ROBLOSECURITY',
       value: cookie,
@@ -76,31 +122,26 @@ app.post('/post', async (req, res) => {
       secure: true,
     });
 
-    // Navigate to the group wall page
     console.log('Navigating to the group wall...');
     await page.goto(`https://www.roblox.com/groups/${groupId}/wall`, {
       waitUntil: 'domcontentloaded',
-      timeout: 60000,  // Increased navigation timeout
+      timeout: 60000,
     });
 
-    // Debugging: Check if we can find the group wall
-    const pageContent = await page.content();
-    console.log('Group Wall Loaded: Checking content...');
-    console.log(pageContent.substring(0, 1000));  // Print first 1000 chars of page content
-
-    // Wait for the message input field on the group wall
     console.log('Waiting for message input field...');
     await page.waitForSelector('textarea[name="message"]', { timeout: 30000 });
-
-    // Type the message into the textarea
     await page.type('textarea[name="message"]', message);
 
-    // Wait for submit button and click it
+    try {
+      await solveCaptcha(page);
+    } catch (error) {
+      console.error('Captcha handling failed:', error.message);
+    }
+
     console.log('Waiting for submit button...');
     await page.waitForSelector('button[type="submit"]', { timeout: 10000 });
     await page.click('button[type="submit"]');
 
-    // Wait for 3 seconds to ensure post is completed
     await page.waitForTimeout(3000);
     await browser.close();
 
@@ -119,3 +160,4 @@ app.get('*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+         
