@@ -21,6 +21,7 @@ app.get('/user', async (req, res) => {
         Cookie: `.ROBLOSECURITY=${COOKIE}`
       }
     });
+
     if (!response.ok) throw new Error('Invalid cookie');
     const data = await response.json();
     res.json(data);
@@ -29,7 +30,7 @@ app.get('/user', async (req, res) => {
   }
 });
 
-// Get groups for user
+// Get user groups
 app.get('/groups/:userId', async (req, res) => {
   const COOKIE = req.headers.authorization;
   if (!COOKIE) return res.status(400).json({ error: 'Missing cookie' });
@@ -47,7 +48,7 @@ app.get('/groups/:userId', async (req, res) => {
   }
 });
 
-// Post message to group wall
+// Post to group wall
 app.post('/post', async (req, res) => {
   const COOKIE = req.headers.authorization;
   const { groupId, message } = req.body;
@@ -63,14 +64,19 @@ app.post('/post', async (req, res) => {
       body: JSON.stringify({ body: message })
     });
 
-    if (!response.ok) throw new Error('Failed to post');
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Post failed:", errorText);
+      throw new Error('Failed to post');
+    }
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Fallback to index.html for frontend
+// Catch-all to serve index.html
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
