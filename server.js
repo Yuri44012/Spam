@@ -1,20 +1,22 @@
 const express = require('express');
 const fetch = require('node-fetch');
 const cors = require('cors');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const COOKIE = process.env.ROBLOSECURITY;
 
 if (!COOKIE) {
-  console.error("Missing .ROBLOSECURITY in .env");
+  console.error("Missing .ROBLOSECURITY in environment");
   process.exit(1);
 }
 
+// API Routes
 app.get('/user', async (req, res) => {
   try {
     const response = await fetch('https://users.roblox.com/v1/users/authenticated', {
@@ -62,4 +64,8 @@ app.post('/post', async (req, res) => {
   }
 });
 
+// Serve index.html from the same folder
+app.use(express.static(path.join(__dirname, '.')));
+
+// Start the server
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
