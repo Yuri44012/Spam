@@ -3,7 +3,7 @@ const fetch     = require('node-fetch');
 const cors      = require('cors');
 const path      = require('path');
 const puppeteer = require('puppeteer');
-const axios     = require('axios');  // for 2Captcha
+const axios     = require('axios');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -12,23 +12,20 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// Helper to get .ROBLOSECURITY from header or body
 const getUserCookie = req =>
   req.headers.authorization?.replace(/^Bearer\s+/i, '') ||
   req.body.cookie ||
   null;
 
-// Direct‑API post helper with X-CSRF-Token retry
 async function postViaApi(cookie, groupId, message) {
   const url = `https://groups.roblox.com/v1/groups/${groupId}/wall/posts`;
   const baseHeaders = {
     'Content-Type': 'application/json',
     'Cookie': `.ROBLOSECURITY=${cookie}`,
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+    'User-Agent': 'Mozilla/5.0'
   };
   const body = JSON.stringify({ body: message });
 
-  // 1) First attempt
   let res = await fetch(url, {
     method: 'POST',
     headers: baseHeaders,
@@ -36,7 +33,6 @@ async function postViaApi(cookie, groupId, message) {
     redirect: 'manual'
   });
 
-  // 2) If 403 + XSRF required, grab token and retry
   if (res.status === 403) {
     const token = res.headers.get('x-csrf-token');
     if (token) {
@@ -55,7 +51,6 @@ async function postViaApi(cookie, groupId, message) {
   return res;
 }
 
-// CAPTCHA solver (unchanged)
 async function solveCaptcha(page) {
   const apiKey = 'a510508163576728d096497dd065e4e5';
   try {
@@ -92,9 +87,6 @@ async function solveCaptcha(page) {
   }
 }
 
-// --- ROUTES ---
-
-// Get authenticated user
 app.get('/user', async (req, res) => {
   const cookie = getUserCookie(req);
   if (!cookie) return res.status(400).json({ error: 'Missing .ROBLOSECURITY cookie' });
@@ -110,7 +102,6 @@ app.get('/user', async (req, res) => {
   }
 });
 
-// Get group roles
 app.get('/groups/:userId', async (req, res) => {
   const cookie = getUserCookie(req);
   if (!cookie) return res.status(400).json({ error: 'Missing .ROBLOSECURITY cookie' });
@@ -126,7 +117,6 @@ app.get('/groups/:userId', async (req, res) => {
   }
 });
 
-// Post to group wall
 app.post('/post', async (req, res) => {
   console.log('POST /post called with:', req.body);
 
@@ -137,7 +127,6 @@ app.post('/post', async (req, res) => {
     return res.status(400).json({ error: 'Missing .ROBLOSECURITY cookie' });
   }
 
-  // 1) Try direct API first
   try {
     const apiRes  = await postViaApi(cookie, groupId, message);
     const apiText = await apiRes.text();
@@ -152,7 +141,6 @@ app.post('/post', async (req, res) => {
     console.error('API post error:', e);
   }
 
-  // 2) Puppeteer fallback
   try {
     const browser = await puppeteer.launch({
       headless: true,
@@ -184,8 +172,11 @@ app.post('/post', async (req, res) => {
     });
 
     console.log('Puppeteer: page loaded, typing message');
-    await page.waitForSelector('textarea[name="message"]', { timeout: 30000 });
-    await page.type('textarea[name="message"]', message);
+
+    // FIXED SELECTOR: target real message input
+    await page.waitForSelector('div[contenteditable="true"]', { timeout: 30000 });
+    await page.click('div[contenteditable="true"]');
+    await page.keyboard.type(message);
 
     console.log('Puppeteer: checking for CAPTCHA');
     try {
@@ -195,7 +186,11 @@ app.post('/post', async (req, res) => {
       console.warn('Puppeteer: no CAPTCHA or solve failed:', captchaErr.message);
     }
 
-    await page.click('button[type="submit"]');
+    // FIXED SELECTOR: click button with text "Post"
+    const [postBtn] = await page.$x("//button[contains(normalize-space(.), 'Post')]");
+    if (!postBtn) throw new Error('Post button not found');
+    await postBtn.click();
+
     await page.waitForTimeout(3000);
     await browser.close();
 
@@ -207,7 +202,6 @@ app.post('/post', async (req, res) => {
   }
 });
 
-// Serve your frontend SPA
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
