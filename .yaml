@@ -1,0 +1,17 @@
+buildCommand: npm install
+startCommand: node index.js
+
+envVars:
+  - key: NODE_ENV
+    value: production
+
+  - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
+    value: "true"
+
+  - key: PUPPETEER_EXECUTABLE_PATH
+    value: "/usr/bin/google-chrome"
+
+  - key: a510508163576728d096497dd065e4e5
+    value: a510508163576728d096497dd065e4e5
+
+# optional: if you're using a free tier plan, consider increasing timeout limits
