@@ -48,24 +48,37 @@ app.get('/groups/:userId', async (req, res) => {
   }
 });
 
-// Post to group wall
+// Post message to group wall (with CSRF token)
 app.post('/post', async (req, res) => {
   const COOKIE = req.headers.authorization;
   const { groupId, message } = req.body;
   if (!COOKIE) return res.status(400).json({ error: 'Missing cookie' });
 
   try {
-    const response = await fetch(`https://groups.roblox.com/v1/groups/${groupId}/wall/posts`, {
+    // Get CSRF token
+    const tokenRes = await fetch('https://auth.roblox.com/v2/logout', {
+      method: 'POST',
+      headers: {
+        Cookie: `.ROBLOSECURITY=${COOKIE}`
+      }
+    });
+
+    const csrfToken = tokenRes.headers.get('x-csrf-token');
+    if (!csrfToken) throw new Error('Failed to get X-CSRF-TOKEN');
+
+    // Send wall post
+    const postRes = await fetch(`https://groups.roblox.com/v1/groups/${groupId}/wall/posts`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': csrfToken,
         Cookie: `.ROBLOSECURITY=${COOKIE}`
       },
       body: JSON.stringify({ body: message })
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
+    if (!postRes.ok) {
+      const errorText = await postRes.text();
       console.error("Post failed:", errorText);
       throw new Error('Failed to post');
     }
@@ -76,7 +89,7 @@ app.post('/post', async (req, res) => {
   }
 });
 
-// Catch-all to serve index.html
+// Serve frontend
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
