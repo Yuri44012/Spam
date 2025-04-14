@@ -2,8 +2,7 @@ const express = require('express');
 const fetch = require('node-fetch');
 const cors = require('cors');
 const path = require('path');
-const puppeteer = require('puppeteer-core');
-const chromium = require('chrome-aws-lambda');
+const puppeteer = require('puppeteer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -59,10 +58,8 @@ app.post('/post', async (req, res) => {
 
   try {
     const browser = await puppeteer.launch({
-      executablePath: await chromium.executablePath || '/usr/bin/chromium-browser',
-      args: chromium.args,
-      headless: chromium.headless,
-      defaultViewport: chromium.defaultViewport,
+      headless: true,  // Ensure headless mode
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],  // Disable sandboxing (needed for some environments like Render)
     });
 
     const page = await browser.newPage();
