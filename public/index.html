@@ -5,7 +5,7 @@
   <style>
     body { font-family: sans-serif; padding: 30px; background: #f9f9f9; }
     .container { max-width: 400px; margin: auto; padding: 20px; background: white; border-radius: 10px; }
-    textarea, select, button { width: 100%; margin-top: 10px; padding: 10px; }
+    textarea, select, button, input { width: 100%; margin-top: 10px; padding: 10px; }
     button { background: #007bff; color: white; border: none; cursor: pointer; }
     button:hover { background: #0056b3; }
   </style>
@@ -13,9 +13,13 @@
 <body>
   <div class="container">
     <h2>Post to Group Wall</h2>
+    
+    <input type="text" id="cookieInput" placeholder="Enter your .ROBLOSECURITY cookie" />
+    
     <div id="login">
-      <button onclick="checkLogin()">Check Login</button>
+      <button onclick="checkLogin()">Login</button>
     </div>
+    
     <div id="form" style="display:none;">
       <p>Logged in as: <span id="username"></span></p>
       <select id="groupList"></select>
@@ -27,18 +31,26 @@
 
   <script>
     let userId = null;
+    let cookie = '';
 
     async function checkLogin() {
-      const res = await fetch('/user');
+      cookie = document.getElementById("cookieInput").value.trim();
+      if (!cookie) return alert("Please enter your .ROBLOSECURITY cookie.");
+
+      const res = await fetch('/user', {
+        headers: { 'Authorization': cookie }
+      });
       const data = await res.json();
 
-      if (data.error) return alert("Login failed");
+      if (data.error) return alert("Login failed: " + data.error);
       userId = data.id;
       document.getElementById("username").innerText = data.name;
       document.getElementById("login").style.display = "none";
       document.getElementById("form").style.display = "block";
 
-      const groupRes = await fetch(`/groups/${userId}`);
+      const groupRes = await fetch(`/groups/${userId}`, {
+        headers: { 'Authorization': cookie }
+      });
       const groups = await groupRes.json();
       const groupSelect = document.getElementById("groupList");
 
@@ -55,7 +67,10 @@
       const message = document.getElementById("message").value;
       const res = await fetch('/post', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': cookie
+        },
         body: JSON.stringify({ groupId, message })
       });
       const data = await res.json();
