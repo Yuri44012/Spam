@@ -149,7 +149,6 @@ app.post('/post', async (req, res) => {
   try {
     const browser = await puppeteer.launch({
       headless: true,
-      executablePath: '/usr/bin/chromium-browser', // Required for Render
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
 
