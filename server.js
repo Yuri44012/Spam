@@ -2,7 +2,7 @@ const express = require('express');
 const fetch = require('node-fetch');
 const cors = require('cors');
 const path = require('path');
-const puppeteer = require('puppeteer');  // Import Puppeteer
+const puppeteer = require('puppeteer'); // Import Puppeteer
 
 const app = express();
 app.use(cors());
@@ -19,8 +19,8 @@ app.get('/user', async (req, res) => {
   try {
     const response = await fetch('https://users.roblox.com/v1/users/authenticated', {
       headers: {
-        Cookie: `.ROBLOSECURITY=${COOKIE}`
-      }
+        Cookie: `.ROBLOSECURITY=${COOKIE}`,
+      },
     });
 
     if (!response.ok) throw new Error('Invalid cookie');
@@ -39,8 +39,8 @@ app.get('/groups/:userId', async (req, res) => {
   try {
     const response = await fetch(`https://groups.roblox.com/v2/users/${req.params.userId}/groups/roles`, {
       headers: {
-        Cookie: `.ROBLOSECURITY=${COOKIE}`
-      }
+        Cookie: `.ROBLOSECURITY=${COOKIE}`,
+      },
     });
     const data = await response.json();
     res.json(data);
@@ -57,7 +57,11 @@ app.post('/post', async (req, res) => {
 
   try {
     // Launch Puppeteer
-    const browser = await puppeteer.launch({ headless: false });  // Set to false to interact with the browser
+    const browser = await puppeteer.launch({
+      headless: true, // Change to false if you need to see the browser interaction
+      args: ['--no-sandbox', '--disable-setuid-sandbox'], // Necessary for some environments like Heroku or Render
+    });
+
     const page = await browser.newPage();
 
     // Set the cookie for the current session
@@ -71,26 +75,26 @@ app.post('/post', async (req, res) => {
     await page.goto(`https://www.roblox.com/groups/${groupId}`);
 
     // Wait for the page to load and the post form to be available
-    await page.waitForSelector('textarea[name="message"]'); // Adjust selector as per your page structure
+    await page.waitForSelector('textarea[name="message"]'); // Adjust this selector as needed
 
-    // Type the message
+    // Type the message into the textarea
     await page.type('textarea[name="message"]', message);
 
-    // Solve CAPTCHA manually (first time)
+    // Solve CAPTCHA manually (you'll need to solve the CAPTCHA on the browser instance)
     console.log('Please solve the CAPTCHA manually in the browser window.');
 
-    // Wait for the form to be able to submit (after CAPTCHA)
-    await page.waitForSelector('button[type="submit"]'); // Adjust selector
+    // Wait for the submit button to be available after CAPTCHA resolution
+    await page.waitForSelector('button[type="submit"]'); // Adjust this selector as needed
 
     // Submit the form
     await page.click('button[type="submit"]');
 
-    // Wait for the confirmation that the message was posted
-    await page.waitForSelector('.success-message'); // Adjust this selector based on the page structure
+    // Wait for the confirmation that the message was posted (you may need to adjust this selector)
+    await page.waitForSelector('.success-message');
 
     console.log('Post successful!');
 
-    // Close the browser after success
+    // Close the browser after the post is completed
     await browser.close();
 
     res.json({ success: true });
@@ -100,9 +104,12 @@ app.post('/post', async (req, res) => {
   }
 });
 
-// Serve frontend
+// Serve frontend (your public directory should contain index.html)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Start the server
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
