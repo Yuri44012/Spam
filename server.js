@@ -16,13 +16,11 @@ if (!COOKIE) {
   process.exit(1);
 }
 
-// API Routes
+// API routes
 app.get('/user', async (req, res) => {
   try {
     const response = await fetch('https://users.roblox.com/v1/users/authenticated', {
-      headers: {
-        Cookie: `.ROBLOSECURITY=${COOKIE}`
-      }
+      headers: { Cookie: `.ROBLOSECURITY=${COOKIE}` }
     });
     if (!response.ok) throw new Error('Invalid cookie');
     const data = await response.json();
@@ -35,9 +33,7 @@ app.get('/user', async (req, res) => {
 app.get('/groups/:userId', async (req, res) => {
   try {
     const response = await fetch(`https://groups.roblox.com/v2/users/${req.params.userId}/groups/roles`, {
-      headers: {
-        Cookie: `.ROBLOSECURITY=${COOKIE}`
-      }
+      headers: { Cookie: `.ROBLOSECURITY=${COOKIE}` }
     });
     const data = await response.json();
     res.json(data);
@@ -64,8 +60,7 @@ app.post('/post', async (req, res) => {
   }
 });
 
-// Serve index.html from the same folder
-app.use(express.static(path.join(__dirname, '.')));
+// Serve frontend from /public
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Start the server
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
