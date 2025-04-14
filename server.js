@@ -13,60 +13,65 @@ app.use(express.json());
 app.use(express.static('public'));
 
 // Helper to get cookie from header or body
-const getUserCookie = (req) =>
-  req.headers.authorization || req.body.cookie || null;
+const getUserCookie = (req) => req.headers.authorization || req.body.cookie || null;
 
 // Function to solve CAPTCHA using 2Captcha
 async function solveCaptcha(page) {
   const apiKey = 'a510508163576728d096497dd065e4e5';  // Your 2Captcha API key
 
-  // Wait for the CAPTCHA iframe to appear
-  await page.waitForSelector('iframe[src*="recaptcha"]', { timeout: 30000 });
-  const iframeHandle = await page.$('iframe[src*="recaptcha"]');
-  const iframe = await iframeHandle.contentFrame();
+  try {
+    // Wait for the CAPTCHA iframe to appear
+    await page.waitForSelector('iframe[src*="recaptcha"]', { timeout: 30000 });
+    const iframeHandle = await page.$('iframe[src*="recaptcha"]');
+    const iframe = await iframeHandle.contentFrame();
 
-  // Extract the CAPTCHA sitekey
-  const sitekey = await iframe.$eval('.g-recaptcha', el => el.getAttribute('data-sitekey'));
+    // Extract the CAPTCHA sitekey
+    const sitekey = await iframe.$eval('.g-recaptcha', (el) => el.getAttribute('data-sitekey'));
 
-  // Send the CAPTCHA challenge to 2Captcha
-  const response = await axios.post('http://2captcha.com/in.php', null, {
-    params: {
-      key: apiKey,
-      method: 'userrecaptcha',
-      googlekey: sitekey,
-      pageurl: page.url(),
-    }
-  });
-
-  const requestId = response.data.request;
-  let solution;
-  
-  // Wait for the CAPTCHA solution to be ready
-  while (true) {
-    const result = await axios.get('http://2captcha.com/res.php', {
+    // Send the CAPTCHA challenge to 2Captcha
+    const response = await axios.post('http://2captcha.com/in.php', null, {
       params: {
         key: apiKey,
-        action: 'get',
-        id: requestId,
-      }
+        method: 'userrecaptcha',
+        googlekey: sitekey,
+        pageurl: page.url(),
+      },
     });
 
-    if (result.data === 'CAPCHA_NOT_READY') {
-      console.log('CAPTCHA is not ready, retrying...');
-      await new Promise(resolve => setTimeout(resolve, 5000));  // Retry after 5 seconds
-    } else {
-      solution = result.data.split('|')[1];
-      break;
+    const requestId = response.data.request;
+    let solution;
+
+    // Wait for the CAPTCHA solution to be ready
+    while (true) {
+      const result = await axios.get('http://2captcha.com/res.php', {
+        params: {
+          key: apiKey,
+          action: 'get',
+          id: requestId,
+        },
+      });
+
+      if (result.data === 'CAPCHA_NOT_READY') {
+        console.log('CAPTCHA is not ready, retrying...');
+        await new Promise((resolve) => setTimeout(resolve, 5000));  // Retry after 5 seconds
+      } else {
+        solution = result.data.split('|')[1];
+        break;
+      }
     }
+
+    // Solve the CAPTCHA by filling the token into the iframe
+    await iframe.evaluate((token) => {
+      document.getElementById('g-recaptcha-response').innerHTML = token;
+    }, solution);
+
+    // Click the submit button after CAPTCHA is solved
+    await page.click('button[type="submit"]');
+    console.log('CAPTCHA solved and form submitted!');
+  } catch (error) {
+    console.error('Error solving CAPTCHA:', error.message);
+    throw new Error('Captcha solving failed');
   }
-
-  // Solve the CAPTCHA by filling the token into the iframe
-  await iframe.evaluate((token) => {
-    document.getElementById('g-recaptcha-response').innerHTML = token;
-  }, solution);
-
-  // Click the submit button after CAPTCHA is solved
-  await page.click('button[type="submit"]');
 }
 
 // Get authenticated user info
